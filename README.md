@@ -123,7 +123,7 @@ download(IdxNode, URL) ->
 > `MASTER` indicates the ID of the master vnode for downloader vonodes.
 
 Next, implement the command:
-```
+```erlang
 ...
 handle_command({download, URL} = Req, _Sender, State) ->
     print_request_info(State#state.partition, node(), Req),
@@ -142,17 +142,17 @@ In the final step uncomment specification for
 `sc_downloader_vnode_master` in `sc_sup.erl` and add it to
 the supervisor's child list. Additionaly, register the vnode in
 `sc_app.erl`:
-```
+```erlang
 ...
     ok = riak_core:register([{vnode_module, sc_vnode}]),
-->  ok = riak_core:register([{vnode_module, sc_downloader_vnode}]),
+    ok = riak_core:register([{vnode_module, sc_downloader_vnode}]),
     ok = riak_core_ring_events:add_guarded_handler(sc_ring_event_handler, []),
 ....
 ```
 
 To test our new funcionality stop the whole cluster, clean project,
 build devrel again and form the cluster:
-```
+```bash
 for d in dev/dev*; do $d/bin/sc stop; done
 make devclean && make devrel
 for d in dev/dev*; do $d/bin/sc start; done
@@ -161,7 +161,7 @@ for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done
 Once we have all the setup up and running attach to one of the nodes
 and observe the logs of the other two nodes. Assuming that you attached
 to dev1:
-```
+```bash
 tail -f dev/dev2/log/erlang.log.1
 tail -f dev/dev3/log/erlang.log.1
 ```
@@ -175,14 +175,12 @@ responsible for one partition).
 > "The randomness" is achieved by picking a vnode for random document
 >  index. See `sc:get_random_dument_index/0`.
 
-### Implementing storing requirement ###
+### Implementing storage part ###
 
-Let's move to our storage system. As above is already implemented in
-`sc:store/2` and `sc:get_content/2` (just uncomment all the lines in
-`sc:store/2`.
-
-> Note, that in this case the same node will be chosen for sotring
-> or retireving data for a particular URL.
+Let's move to our storage system. As above, the API is already
+implemented in `sc:store/2` and `sc:get_content/2` (just uncomment
+all the lines these functions). Recall, that in this case the same
+vnode will be chosen for storing or retireving data for a particular URL.
 
 Similarily as in the previous example we need a vnode to do our job.
 There is already such a vnode implemented `sc_storage_vnode.erl`.
@@ -192,23 +190,23 @@ is asynchronus but doesn't block the vnode. The difference is also
 in the command for retrieving the content as we return a reply.
 
 To get it working you also have to take care of the master vnode for
-storage in `sc_sup.erl` and register the `sc_storage_vnode.erl` - in
-the analogously as with downloader vnode.
+storage in `sc_sup.erl` and register the `sc_storage_vnode.erl` -
+analogously as with downloader vnode.
 
 When you're done restart the whole machinery using the snippet above.
-Next, let's beging testing how it works: so attach to one node and
-"tailf" the logs of the others. Download your favourie website 
-and get its content:
+Next, let's beging testing how it works: attach to one node and "tailf"
+the logs of the others. Download your favourie website and get
+its content:
 ```
 sc:download(<<"http://joemonster.org/">>).
 sc:download(<<"http://joemonster.org/">>).
 sc:get_content(<<"http://joemonster.org/">>).
 ```
 
-You would expect that the download request will be served by different
-vnodes and each store and get content requests by the same vnode. But,
-hey! what if `get_content` return empty list even though the request
-match the right partition?! Well, it's possible...
+You would expect that *download* requests will be served by different
+vnodes and each *store* and *get_content* requests by the same vnode.
+But, hey! what if `get_content/1` returns an empty list even though
+the request match the right partition?! Well, it's possible...
 
 The explanation behind this behaviour is that, when you start your
 first node it servers all the partitions which in practice means that
@@ -220,13 +218,13 @@ nodes in the same time. But riak_core have no idea how to move our
 data so it's just lost! Terrible ha?
 
 To observe the whole system working as expected you need to wait for
-the cluster to come in "stable state". Just check the status:  
+the cluster to come into "stable state". Just check the status:
 `./dev/dev1/bin/sc-admin member_status`
-When there're now pending changes it means that no partitions will be
-moved. Now you can experiment again and make sure, that request are
+When there're no pending changes it means that no partitions will be
+moved. Now you can experiment again and make sure, that requests are
 served by appropriate partitions, vnodes and nodes.
 
-In the next chapter I'm going to explain how to prepare for moving
+In the next part I'm going to explain how to prepare for moving
 a vnode: so called *handoff*.
 
 ### Notatki ###

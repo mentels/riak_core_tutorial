@@ -22,8 +22,18 @@ start_link() ->
 init(_Args) ->
     VMaster = { sc_vnode_master,
                   {riak_core_vnode_master, start_link, [sc_vnode]},
-                  permanent, 5000, worker, [riak_core_vnode_master]},
+                permanent, 5000, worker, [riak_core_vnode_master]},
+
+    VDownloaderMaster =
+        {sc_downloader_vnode_master,
+         {riak_core_vnode_master, start_link, [sc_downloader_vnode]},
+         permanent, 5000, worker, [riak_core_vnode_master]},
+
+    VStorageMaster =
+        {sc_storage_vnode_master,
+         {riak_core_vnode_master, start_link, [sc_storage_vnode]},
+         permanent, 5000, worker, [riak_core_vnode_master]},
 
     { ok,
         { {one_for_one, 5, 10},
-          [VMaster]}}.
+          [VMaster, VDownloaderMaster, VStorageMaster]}}.

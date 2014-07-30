@@ -1,0 +1,4 @@
+:name "riak_core-tutorial"
+:node-sname "rct"
+:lib-dirs '("deps" "apps/sc")
+:app-include-dirs '("include")

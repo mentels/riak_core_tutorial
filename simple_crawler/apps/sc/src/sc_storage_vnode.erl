@@ -1,6 +1,7 @@
 -module(sc_storage_vnode).
 -behaviour(riak_core_vnode).
 -include("sc.hrl").
+-include("deps/riak_core/include/riak_core_vnode.hrl").
 
 %% API
 -export([start_vnode/1,
@@ -62,8 +63,10 @@ handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
     {noreply, State}.
 
-handle_handoff_command(_Message, _Sender, State) ->
-    {noreply, State}.
+handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
+                       _Sender, State) ->
+    Acc = dict:fold(Fun, Acc0, State#state.store),
+    {reply, Acc, State}.
 
 handoff_starting(_TargetNode, State) ->
     {true, State}.
@@ -74,14 +77,21 @@ handoff_cancelled(State) ->
 handoff_finished(_TargetNode, State) ->
     {ok, State}.
 
-handle_handoff_data(_Data, State) ->
-    {reply, ok, State}.
+handle_handoff_data(Data, State) ->
+    {URL, Content} = binary_to_term(Data),
+    Dict = dict:store(URL, Content, State#state.store),
+    {reply, ok, State#state{store = Dict}}.
 
-encode_handoff_item(_ObjectName, _ObjectValue) ->
-    <<>>.
+encode_handoff_item(URL, Content) ->
+    term_to_binary({URL, Content}).
 
 is_empty(State) ->
-    {true, State}.
+    case dict:size(State#state.store) of
+        0 ->
+            {true, State};
+        _ ->
+            {false, State}
+    end.
 
 delete(State) ->
     {ok, State}.

@@ -227,6 +227,99 @@ served by appropriate partitions, vnodes and nodes.
 In the next part I'm going to explain how to prepare for moving
 a vnode: so called *handoff*.
 
+## Handoff ##
+
+### What is handoff?  ###
+
+A *handoff* occurss when a vnode realizes that it's not on the proper
+physical node. Such a situation can take place when:
+* a node is added or removed
+* a node comes alive after it has been down.
+In riak_core there's a periodic "home check* that verifies whether
+a vnode uses correct physical node. If that's not true for some vnode
+it will go into handoff mode and data will be transferred. 
+
+### How to handle handoff? ###
+
+When riak_core decides to perform a handoff it calls two functions:
+`Mod:handoff_starting/2` and `Mod:is_empty/1`. Through the first one
+a vnode can agreeon or not to proceede with the handoff. The first one
+indicates if there's any data to be transfered and it's interesting in
+our case. So lets code it in `sc_storage_vnode.erl`:
+```erlang
+is_empty(State) ->
+    case dict:size(State#state.store) of
+        0 ->
+            {true, State};
+        _ ->
+            {false, State}
+    end.
+```
+
+When the framework decides to start handoff it sends `?FOLD_REQ` that is
+a request representing how to fold over the data held by the vnode.
+This request is supposed to be handled in `Mod:handle_handoff_command/3`
+and contains "folding function" along with initial accumulator.  Let's
+add it to our storage vnode:
+```erlang
+handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
+                       _Sender, State) ->
+    Acc = dict:fold(Fun, Acc0, State#state.store),
+    {reply, Acc, State}.
+```
+
+> If you're like my and this ?FOLD_REQ looks strange to you have a look
+> at the [riak_core_vnode.hrl](https://github.com/basho/riak_core/blob/1.0/include/riak_core_vnode.hrl)
+> that reveals that the macro is just a record.
+
+
+So, what's next with this magic handoff? Well, at this point things
+are simple: each iteration of "folding function" calls
+`Mod:encode_handoff_item/2` that just do what it is supposed to do:
+encode data before sending it to the targe vnode. The target vnode,
+suprisingly (!), decodes the data in `Mod:handle_handoff_data`. In
+this tutorial we are using extremely complex method of encoding so
+write the following code in your vnode really careful:
+```erlang
+encode_handoff_item(URL, Content) ->
+    term_to_binary({URL, Content}).
+...
+handle_handoff_data(Data, State) ->
+    {URL, Content} = binary_to_term(Data),
+    Dict = dict:store(URL, Content, State#state.store),
+    {reply, ok, State#state{store = Dict}}.
+```
+
+And that's it. Our system is now "dead node resistant". One more thing
+is worth noting here: after the handoff is completed `Mod:delete/1`
+is called and the vnode will be terminated just after this call.
+During the termination `Mod:terminate/2` will be called too.
+
+> I did not present all the callbacks related to handoff. For more
+> information go to great explanation
+[here](https://github.com/vitormazzi/try-try-try/tree/master/2011/riak-core-the-vnode#handoff).
+> If you need more details look at the
+[basho wiki](https://github.com/basho/riak_core/wiki/Handoffs).
+
+### See handoff in action ###
+
+Now, when we have handoff impleted, build devrel, start the cluster,
+**but only join dev2 to dev1**. We want to observe how the partitions
+are moved:
+```bash
+for d in dev/dev*; do $d/bin/sc start; done
+dev/dev2/bin/sc-admin join sc1@127.0.0.1
+```
+Wait for the ring to get populated symmetricaly across the nodes. Use
+`./dev/dev1/bin/sc-admin member_status` to check the status.
+
+Next attach to the console of node from the cluster and look at the
+logs of the other node. Download some websites and write down on
+which erlang node they are stored. Next join the 3rd node to the cluster
+and try to retrieve content from previously downloaded sites. You
+should see that some of them will be serverd from the new node
+and it's transparent to a user.
+
 ### Notatki ###
 1. Erlang R15B03 jest potrzebny
    

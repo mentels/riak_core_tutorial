@@ -190,29 +190,33 @@ completed!
 ## Implementing simple crawler ##
 
 The plan for the next step is to implement a distributed internet
-crawler that will be able to download websites and just store them for
+crawler that will be able to download websites and store them for
 later retrieval. The desing is as follows:
 * downloading will take place on random vnodes in the cluster;
 * a particular vnode will store a content of a given URL;
-* an old version of a website will be just replaced by new one.
+* an old version of a website will be replaced by a new one;
+* the API will be implemented in an `sc.erl` module.
 
-The picture below shows the system for 3 erlang nodes:
-> jakiś rysunek tutaj
+This part of the tutorial requires you to implement missing parts of
+the `simple_crawler` application that can be found in
+`RIAK_CORE_ENV/synced/riak_core_tutorail/simple_crawler`. The
+application structure is compliant with Erlang/OTP so all the modules
+are in `apps/sc/src`.
 
 ### Implementing downloader part  ###
 
-We already have an API for downloading in `sc:download/1` so we only
-need to implement a vnode that will be handling the actual download
+The API for downloader is already implemented in `sc:download/1` so
+we only need to add a vnode that will be handling the actual download
 tasks. A skeleton for the vnode is already there in
 `sc_downloader_vnode.erl`. Note, that a vnode have to implement
-`riak_core_vnode` behaviour. Here we're focusing on `hadnle_command/3`
+`riak_core_vnode` behaviour. Here we're focusing on `handle_command/3`
 callback, that will be invokded by the `riak_core_vnode_master:command/3`.
 
 > More information on the `riak_core_vnode` callbacks can be found
 > [here](https://github.com/vitormazzi/try-try-try/tree/master/2011/riak-core-the-vnode#life-cycle-callbacks).
 
 Let's get to coding. First of all, add the asynchronous API to the
-vnode:
+vnode. Edit the `sc_downloader_vnode.erl`:
 ```erlang
 -export([start_vnode/1,
          download/2]).
@@ -225,7 +229,7 @@ download(IdxNode, URL) ->
     riak_core_vnode_master:command(IdxNode, {download, URL}, ?MASTER).
 ```
 
-> `MASTER` indicates the ID of the master vnode for downloader vonodes.
+`MASTER` indicates the ID of the master vnode for downloader vnodes.
 
 Next, implement the command:
 ```erlang
@@ -243,15 +247,22 @@ handle_command({download, URL} = Req, _Sender, State) ->
 ...
 ```
 
-In the final step uncomment specification for
-`sc_downloader_vnode_master` in `sc_sup.erl` and add it to
-the supervisor's child list. Additionaly, register the vnode in
-`sc_app.erl`:
+In the final step uncomment specification for 
+`sc_downloader_vnode_master` in `sc_sup.erl` and add it to the
+supervisor's child list:
 ```erlang
 ...
-    ok = riak_core:register([{vnode_module, sc_vnode}]),
+VDownloaderMaster =
+    {sc_downloader_vnode_master,
+     {riak_core_vnode_master, start_link, [sc_downloader_vnode]},
+     permanent, 5000, worker, [riak_core_vnode_master]},
+...
+{ok, {{one_for_one, 5, 10}, [VMaster, VDownloaderMaster]}}.
+```
+Additionaly, register the vnode in `sc_app.erl`:
+```erlang
+...
     ok = riak_core:register([{vnode_module, sc_downloader_vnode}]),
-    ok = riak_core_ring_events:add_guarded_handler(sc_ring_event_handler, []),
 ....
 ```
 
@@ -263,6 +274,10 @@ make devclean && make devrel
 for d in dev/dev*; do $d/bin/sc start; done
 for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done
 ```
+> This time to make things simpler we won't be **staging** and
+> **committing** changes to the riak_core ring. [This](https://github.com/rzezeski/rebar_riak_core)
+> riak_core rebar template implements such simplified behaviour.
+
 Once we have all the setup up and running attach to one of the nodes
 and observe the logs of the other two nodes. Assuming that you attached
 to dev1:
@@ -273,12 +288,12 @@ tail -f dev/dev3/log/erlang.log.1
 
 Experiment a bit with `sc:download/1` API:
 `1> sc:download(<<"http://www.erlang.org">>).` and note that the
-reuqests are serverd by a random partitions on different nodes.
-Effectively it means request hit different vnodes (a vnode is
-responsible for one partition).
+reuqests are serverd by random partitions on different nodes.
+Effectively it means that requests hit different vnodes (a vnode is
+responsible for one partition, right?).
 
-> "The randomness" is achieved by picking a vnode for random document
->  index. See `sc:get_random_dument_index/0`.
+"The randomness" is achieved by picking a vnode for random document
+index. See `sc:get_random_dument_index/0` how it works.
 
 ### Implementing storage part ###
 

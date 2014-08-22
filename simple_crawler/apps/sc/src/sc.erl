@@ -6,7 +6,8 @@
          ping/0,
          download/1,
          store/2,
-         get_content/1
+         get_content/1,
+         fill/0
         ]).
 
 %% Public API
@@ -38,6 +39,11 @@ get_content(URL) ->
     IdxNode = get_index_node(DocIdx),
     sc_storage_vnode:get_content(IdxNode, URL).
 
+%% @doc downloads content for all linkes specified in ../../links.txt
+fill() ->
+    {ok, File} = file:open("../../links.txt", [read]),
+    process_links(File).
+
 %% Helpers
 
 get_random_document_index() ->
@@ -45,8 +51,19 @@ get_random_document_index() ->
 
 get_index_node(DocIdx) ->
     [{IndexNode, _Type}] =
-        riak_core_apl:get_primary_apl(DocIdx, 1, sc),
+        riak_core_apl:get_apl(DocIdx, 1, sc),
     IndexNode.
 
 get_index_for_url(URL) ->
     riak_core_util:chash_key({<<"url">>, list_to_binary(URL)}).
+
+process_links(File) ->
+    case io:get_line(File, "") of
+        eof ->
+            file:close(File),
+            ok;
+        Line ->
+            download(Line),
+            process_links(File)
+    end.
+                

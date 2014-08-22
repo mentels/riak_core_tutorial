@@ -1,86 +1,191 @@
-riak_core-tutorial
+riak_core_tutorial
 ==================
+
+## Environment ##
+
+To skip setting up an environment there is already one prepared for this
+tutorial: [riak_core_env](https://github.com/mentels/riak_core_env).
+In the following chapters I assume that you have the environment
+running and do the whole work in
+`RIAK_CORE_ENV/synced/riak_core_tutorail/` directory mentioned in the
+link.
 
 ## Multinode Hello World ##
 
-1. Install riak_core rebar_template
+> The commands in this chapter has to be invoked from the VM.
 
-    > to może będzie zrobione na maszynce wirtualnej więc na razie nie opisuje
-    
-2. Generate multinode app  
-`./rebar create template=riak_core_multinode appid=sc nodeid=sc`
-3. Modify rebar.config to match the relase 1.4.9 and remove:  
-   ```
-   {deps, [
-       {riak_core, "1.4.*",
-           {git, "git://github.com/basho/riak_core", {tag, "1.4.9"}}}
-   ]}.
-   ```
+#### Installing rebar template for riak_core ####
 
-    > At the time of writing this tutorial the latest stable version
-    > is 1.4.10. For other version see [releases](https://github.com/basho/riak_core/releases).
+Folks from Basho where kind enough to prepare a rebar template for
+creating riak_core apps. Apart from creating an application structure
+it also creates a script for administering the cluster.
 
-4. Generate release with 3 nodes and start them:  
-   ```
-   make dev rel`  
-   for d in dev/dev*; do $d/bin/sc start; done
-   ```
-5. Check the status of the nodes:  
-`./dev/dev1/bin/sc-admin member_status`  
-We see that there's only one node in the ring.
-6. Join the nodes in a cluster and verify the status again:  
-   ```
-   for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done  
-   ./dev/dev1/bin/sc-admin member_status  
-   ```
-   
-   Look at the `Ring` column's values. It indicates how much of the key
-   space is allocated for a particular node. Over time, each node should
-   cover proportional percentage of a ring.
-7. Now look how the constant hashing works:
-    8. Attach to a node 1:  
-       `./dev/dev1/bin/sc attach`  
-    9. Run the following snippet to compute the hash on each node:
-    ```
-    F = fun() ->
-        Hashes = [begin
-            Node = "sc" ++ integer_to_list(N) ++ "@127.0.0.1",
-            rpc:call(list_to_atom(Node), riak_core_util, chash_key, [{<<"ping">>, <<"ping">>}])
-        end || N <- [1,2,3]],
-        [OneHash] = lists:usort(Hashes)
-    end.
-    F(), F().
-    ```
-    10. Note two important things:
-        11. Each node returns the same hash for a key.
-        12. The hash is the same over time.
-13. Now let's see how the objects are dispatch over the ring to vnodes.
+Clone the template and install it (under ~/.rebar/templates):
+```bash
+git clone https://github.com/basho/rebar_riak_core
+cd rebar_riak_core && make install
+```
 
-    > Jakaś teoria i rysunek obrazujący vnode'a i parametr N.
-    >
-    > **What is vnode?**
-    > A vnode is a virtual node, as opposed to physical node
-    > * Each vnode is responsible for one partition on the ring
-    > * A vnode is an Erlang process
-    > * A vnode is a behavior written atop of the gen_fsm behavior
-    > * A vnode handles incoming requests
-    > * A vnode potentially stores data to be retrieved later
-    > * A vnode is the unit of concurrency, replication, and fault tolerance
-    > * Typically many vnodes will run on each physical node
-    > 
-    > Each machine has a vnode master who's purpose is to keep
-    > track of all active vnodes on its node.
-    >
-    > **What is N?**
-    > In a riak_core world it indicates number of vnodes on which we
-    > want to perform something. 
+> The template provided by Basho is quite old. However there are
+> a lot of forks and
+> [this one](https://github.com/marianoguerra/rebar_riak_core) seems
+> to be adjusted to the newest stable version of riak_core that is
+> 1.4.10 at the time of writing this tutorial. For other versions see
+> [releases](https://github.com/basho/riak_core/releases).
 
-    ```
-    [Hash] = F().
-    riak_core_apl:get_primary_apl(H, _N = 2, sc).
-    ```
+#### Hello Multinode!!! ####
 
-    `apl` stands for *active preference list*.
+Once we have the template let's use it to generate an Erlang app. Enter
+the `hello_multinode` directory and invoke rebar:
+```bash
+cd ~/synced/riak_core_tutorial/hello_multinode &&
+./rebar create template=riak_core appid=hwmn nodeid=hwmn
+```
+
+Next tweak it a little bit so that we work on the newest stable release
+of the beast. Also we need newer lager version. Go and modify freshly
+created `rebar.config`:
+```bash
+{deps, [
+    {lager, "2.0.1", {git, "git://github.com/basho/lager", {tag, "2.0.1"}}},
+    {riak_core, "1.4.10", {git, "git://github.com/basho/riak_core", {tag, "1.4.10"}}}
+]}.
+```
+
+We are ready to generate a release with 4 nodes and play with them:
+```bash
+make devrel
+for d in dev/dev*; do $d/bin/hwmn start; done
+```
+
+To make sure that we're up and running do:  
+`for d in dev/dev*; do $d/bin/hwmn ping; done`  
+
+If you're not getting pongs... well I'm sorry - it worked for me.
+But do our nodes know anything about each other? Let's check it using
+an admin utility:  
+`./dev/dev1/bin/hwmn-admin member_status`  
+
+The output from the above command should like like this:
+```bash
+================================= Membership ==================================
+Status     Ring    Pending    Node
+-------------------------------------------------------------------------------
+valid     100.0%      --      'hwmn1@127.0.0.1'
+-------------------------------------------------------------------------------
+```
+This simply means that the nodes **ARE NOT** in any relation - node /hwmn1/
+knows just about itself. But as you probably already know riak_core
+machinery was invented to actually help nodes live together. To join
+them, issue:  
+`for d in dev/dev{2,3,4}; do $d/bin/hwmn-admin cluster join hwmn1@127.0.0.1; done`  
+
+But this is not enough. We've just *staged* changes to the ring. Before
+they take effect we have to **confirm** the plan and **commit**. Yeah,
+complicated... but move forward:  
+`dev/dev1/bin/hwmn-admin cluster plan`  
+
+We've just get informed by riak_core what will happen. Trust me and
+agree by committing:  
+`dev/dev1/bin/hwmn-admin cluster commit`  
+
+And check the node's relations again:  
+`./dev/dev1/bin/hwmn-admin member_status`  
+
+If your output is similar to the following you managed to make a family:
+```bash
+================================= Membership ==================================
+Status     Ring    Pending    Node
+-------------------------------------------------------------------------------
+valid      75.0%     25.0%    'hwmn1@127.0.0.1'
+valid       9.4%     25.0%    'hwmn2@127.0.0.1'
+valid       7.8%     25.0%    'hwmn3@127.0.0.1'
+valid       7.8%     25.0%    'hwmn4@127.0.0.1'
+-------------------------------------------------------------------------------
+Valid:4 / Leaving:0 / Exiting:0 / Joining:0 / Down:0
+```
+Look at the `Ring` column. It indicates how much of the key
+space is allocated for a particular node. Over time, each node should
+cover proportional percentage of a ring.
+
+#### Consistent hashing ####
+
+What is it? After the
+[Riak Glossary](http://docs.basho.com/riak/latest/theory/concepts/glossary/#Consistent-Hashing):
+> Consistent hashing is a technique used to limit the reshuffling of
+> keys when a hash-table data structure is rebalanced
+> (when slots are added or removed). Riak uses consistent hashing
+> to organize its data storage and replication.
+> Specifically, the vnodes in the Riak Ring responsible for storing
+> each object are determined using the consistent hashing technique.
+
+Basically, if we want to perform an operation in a particular riak_core
+node (I'll try to explain mysterious *vnode* later) **and** we always
+want it to be the same node for a particular input, we use
+consistent hasing. And the resulting hash value for a given input stays
+the same regardless of changes to the ring.
+
+As an exercise we can compute a hash value for some input and make
+sure that it's the same over the ring. To do so attach to one of
+the nodes:  
+`./dev/dev1/bin/hwmn attach`  
+and run the following snippet:
+``` erlang
+F = fun() ->
+    Hashes = [begin
+    Node = "hwmn" ++ integer_to_list(N) ++ "@127.0.0.1",
+        rpc:call(list_to_atom(Node), riak_core_util, chash_key, [{<<"please">>, <<"bleed">>}])
+    end || N <- [1,2,3]],
+    [OneHash] = lists:usort(Hashes),
+    OneHash
+end.
+(Hash = F()) ==  F().
+```
+> **What is a *vnode*?**
+>
+> ![alt text](/img/rct_vnode.png)
+>
+> A *vnode* is a virtual node, as opposed to physical node
+> * Each vnode is responsible for one partition on the ring
+> * A vnode is an Erlang process
+> * A vnode is a behavior written a top of the gen_fsm behavior
+> * A vnode handles incoming requests
+> * A vnode potentially stores data to be retrieved later
+> * A vnode is the unit of concurrency, replication, and fault tolerance
+> * Typically many vnodes will run on each physical node
+> 
+> Each machine has a vnode master who's purpose is to keep
+> track of all active vnodes on its node.
+
+
+How can we make a use of a computed `Hash`? We can get a list of vnodes
+on which we can perform/store something.
+
+```
+riak_core_apl:get_primary_apl(Hash, _N = 2, hwmn).
+```
+> `apl` stands for *active preference list*.
+>
+> The value of `_N` indicates how many nodes we want to involve in
+> performing some operation associated with `Hash`. For example we might
+> want to save an object on two nodes.
+
+
+The output from the call looks like this:
+```erlang
+[{1301649895747835411525156804137939564381064921088, 'hwmn2@127.0.0.1'},
+ {1324485858831130769622089379649131486563188867072, 'hwmn3@127.0.0.1'}]
+```
+How to read this? The first element of a tuple is a partition (remember
+that a **vnode** is responsible for one partition in the ring?) which is
+dedicated to the `Hash` and as you guessed the second element is
+a node on which the partition sits!
+
+When you're done with playing with the cluster stop the nodes:  
+`for d in dev/dev*; do $d/bin/hwmn stop; done`
+
+Awesome, congratulations, great, sweet just fantastic. Hello Multinode
+completed!
 
 ## Implementing simple crawler ##
 
@@ -319,6 +424,31 @@ which erlang node they are stored. Next join the 3rd node to the cluster
 and try to retrieve content from previously downloaded sites. You
 should see that some of them will be serverd from the new node
 and it's transparent to a user.
+
+## Fault tolerance ##
+
+Without destroying the previous setup stop one of the nodes that you know
+holds content for some website. Then try to get content of the website.
+You should ended up with error similar to the following:
+```erlang
+(sc1@127.0.0.1)13> sc:get_content("http://pinkbike.com").
+** exception error: no match of right hand side value []
+     in function  sc:get_index_node/1 (apps/sc/src/sc.erl, line 47)
+     in call from sc:get_content/1 (apps/sc/src/sc.erl, line 38)
+```
+It says that we got unexpected empty list in `sc:get_index_node/1`.
+Have a look at this function:
+```erlang
+get_index_node(DocIdx) ->
+    [{IndexNode, _Type}] =
+        riak_core_apl:get_primary_apl(DocIdx, 1, sc),
+    IndexNode.
+```
+It look like `riak_core_apl:get_primary_apl/3` returned empty list which
+means that it didn't find a vnode to serve our request. And that is
+actually true as we stored URL for the content only on one vnode its
+erlang node died. To remedy this situation we need to store our data
+on more than one node. 
 
 ### Notatki ###
 1. Erlang R15B03 jest potrzebny

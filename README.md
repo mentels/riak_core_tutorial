@@ -291,7 +291,7 @@ tail -f dev/dev3/log/erlang.log.1
 > Run the above commands from separate consoles.
 
 Experiment a bit with `sc:download/1` API:  
-`1> sc:download(<<"http://www.erlang.org">>).`
+`1> sc:download("htp://www.erlang.org").`
 
 Note that the reuqests are serverd by random partitions on different
 nodes. Effectively it means that requests hit different vnodes (a vnode

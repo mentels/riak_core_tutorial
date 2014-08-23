@@ -247,7 +247,7 @@ handle_command({download, URL} = Req, _Sender, State) ->
 ...
 ```
 
-In the final step uncomment specification for 
+In the final step provide a specification for 
 `sc_downloader_vnode_master` in `sc_sup.erl` and add it to the
 supervisor's child list:
 ```erlang
@@ -275,22 +275,27 @@ for d in dev/dev*; do $d/bin/sc start; done
 for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done
 ```
 > This time to make things simpler we won't be **staging** and
-> **committing** changes to the riak_core ring. [This](https://github.com/rzezeski/rebar_riak_core)
-> riak_core rebar template implements such simplified behaviour.
+> **committing** changes to the riak_core ring.
+> [This](https://github.com/rzezeski/rebar_riak_core)
+> riak_core rebar template implements such simplified behaviour. And we
+> will get by with 3 nodes.
 
 Once we have all the setup up and running attach to one of the nodes
-and observe the logs of the other two nodes. Assuming that you attached
-to dev1:
+and observe the logs of the other two nodes:
 ```bash
+dev/dev1/bin/sc attach
 tail -f dev/dev2/log/erlang.log.1
 tail -f dev/dev3/log/erlang.log.1
 ```
 
-Experiment a bit with `sc:download/1` API:
-`1> sc:download(<<"http://www.erlang.org">>).` and note that the
-reuqests are serverd by random partitions on different nodes.
-Effectively it means that requests hit different vnodes (a vnode is
-responsible for one partition, right?).
+> Run the above commands from separate consoles.
+
+Experiment a bit with `sc:download/1` API:  
+`1> sc:download(<<"http://www.erlang.org">>).`
+
+Note that the reuqests are serverd by random partitions on different
+nodes. Effectively it means that requests hit different vnodes (a vnode
+is responsible for one partition, right?).
 
 "The randomness" is achieved by picking a vnode for random document
 index. See `sc:get_random_dument_index/0` how it works.

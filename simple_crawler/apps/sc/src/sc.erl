@@ -2,13 +2,11 @@
 -include("sc.hrl").
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 
--export([
-         ping/0,
+-export([ping/0,
          download/1,
          store/2,
          get_content/1,
-         fill/0
-        ]).
+         fill/0]).
 
 %% Public API
 

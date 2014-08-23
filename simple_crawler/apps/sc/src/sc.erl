@@ -24,18 +24,21 @@ download(URL) ->
     IdxNode = get_index_node(DocIdx),
     sc_downloader_vnode:download(IdxNode, URL).
 
-%% doc Store URL's content in a VNode correspoding to the URL
+%% @doc Store URL's content in a VNode correspoding to the URL
 -spec store(string(), binary()) -> term().
 store(URL, Content) ->
-    DocIdx = get_index_for_url(URL),
-    IdxNode = get_index_node(DocIdx),
-    sc_storage_vnode:store(IdxNode, {URL, Content}).
+    ok.
+    %% DocIdx = get_index_for_url(URL),
+    %% IdxNode = get_index_node(DocIdx),
+    %% sc_storage_vnode:store(IdxNode, {URL, Content}).
 
+%% @doc Get content for a given URL.
 -spec get_content(string()) -> {ok, binary()} | not_found.
 get_content(URL) ->
-    DocIdx = get_index_for_url(URL),
-    IdxNode = get_index_node(DocIdx),
-    sc_storage_vnode:get_content(IdxNode, URL).
+    ok.
+    %% DocIdx = get_index_for_url(URL),
+    %% IdxNode = get_index_node(DocIdx),
+    %% sc_storage_vnode:get_content(IdxNode, URL).
 
 %% @doc downloads content for all linkes specified in ../../links.txt
 fill() ->

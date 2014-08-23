@@ -48,8 +48,7 @@ get_random_document_index() ->
     riak_core_util:chash_key({<<"download">>, term_to_binary(now())}).
 
 get_index_node(DocIdx) ->
-    [{IndexNode, _Type}] =
-        riak_core_apl:get_apl(DocIdx, 1, sc),
+    [IndexNode] = riak_core_apl:get_apl(DocIdx, 1, sc),
     IndexNode.
 
 get_index_for_url(URL) ->

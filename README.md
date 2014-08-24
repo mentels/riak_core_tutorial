@@ -316,8 +316,8 @@ is synchronous but **does not** block the vnode. The difference is also
 in the command for retrieving the content as we return a reply.
 
 To get it working you have to take care of the master vnode for
-storage in `sc_sup.erl` and register the `sc_storage_vnode.erl` -
-analogously as with downloader vnode.
+storage in `sc_sup.erl` and register the `sc_storage_vnode.erl` in the
+`sc_app.erl`- analogously as with downloader vnode.
 
 > The `ID` in the child specification that you need to provide
 > in sc_sup.erl (for example sc_storage_vnode_master) must match the

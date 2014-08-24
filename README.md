@@ -304,17 +304,16 @@ index. See `sc:get_random_dument_index/0` how it works.
 
 Let's move to our storage system. As above, the API is already
 implemented in `sc:store/2` and `sc:get_content/2` (uncomment
-all the lines these functions). Recall from the desing description,
+all the lines in these functions). Recall from the design description,
 that in this case the same vnode will be chosen for storing or
-retireving data for a particular URL.
+retrieving data for a particular URL.
 
-Similarily as in the previous example we need a vnode to do our job.
+Similarly as in the previous example we need a vnode to do our job.
 There is already such a vnode implemented `sc_storage_vnode.erl`.
 Please, have look at its `get_content/3` API function. It invokes
 the command using `riak_core_vnode_master:sync_spawn_command/3` that
-is synchronus but doesn't block the vnode. The difference is also
-in the command for retrieving the content as we return a reply:
-
+is synchronous but **does not** block the vnode. The difference is also
+in the command for retrieving the content as we return a reply.
 
 To get it working you have to take care of the master vnode for
 storage in `sc_sup.erl` and register the `sc_storage_vnode.erl` -
@@ -324,11 +323,20 @@ analogously as with downloader vnode.
 > in sc_sup.erl (for example sc_storage_vnode_master) must match the
 > 3rd argument in the call to `riak_core_vnode_master:command/3`.
 
-When you're done restart the whole machinery using the snippet above.
-Next, let's beging testing how it works: attach to one node and "tailf"
-the logs of the others. Download your favourie website and get
-its content:
+When you're done restart the whole machinery, attach to one node and
+"tailf" the other nodes' logs:
+```bash
+for d in dev/dev*; do $d/bin/sc stop; done
+make devclean && make devrel
+for d in dev/dev*; do $d/bin/sc start; done
+for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done
+dev/dev1/bin/sc attach
+tail -f dev/dev2/log/erlang.log.1
+tail -f dev/dev3/log/erlang.log.1
 ```
+
+Then download your favorite website and retrieve its content:
+```erlang
 sc:download("http://joemonster.org/").
 sc:download("http://joemonster.org/").
 sc:get_content("http://joemonster.org/").
@@ -336,15 +344,15 @@ sc:get_content("http://joemonster.org/").
 
 You would expect that *download* requests will be served by different
 vnodes and each *store* and *get_content* requests by the same vnode.
-But, hey! what if `get_content/1` returns an empty list even though
+But, hey! what if `get_content/1` returns nothing but `ok` even though
 the request matches the right partition?! Well, it's possible...
 
-The explanation behind this behaviour is that, when you start your
+The explanation behind this behavior is that, when you start your
 first node it servers all the partitions which in practice means that
 it runs all the vnodes of each kind (by default 64 partitions are
 created). When new nodes join the cluster the partitions are spread
 across them but it happens in the background - strictly speaking: while
-the cluster is serving reuquest it's moving vnodes to other physical
+the cluster is serving a request it's moving vnodes to other physical
 nodes in the same time. But riak_core have no idea how to move our
 data so it's just lost! Terrible ha?
 

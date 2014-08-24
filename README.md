@@ -371,21 +371,22 @@ vnode to another erlang node: so called *handoff*.
 
 ### What is handoff?  ###
 
-A *handoff* occurss when a vnode realizes that it's not on the proper
-physical node. Such a situation can take place when:
-* a node is added or removed
+A *handoff* occurs when a vnode realizes that it's not on the proper
+Erlang node. Such a situation can take place when:
+* a node is added to or removed from the ring
 * a node comes alive after it has been down.
-In riak_core there's a periodic "home check* that verifies whether
+
+In riak_core there's a periodic "home check" that verifies whether
 a vnode uses correct physical node. If that's not true for some vnode
-it will go into handoff mode and data will be transferred. 
+it will go into *handoff mode* and data will be transferred. 
 
 ### How to handle handoff? ###
 
 When riak_core decides to perform a handoff it calls two functions:
 `Mod:handoff_starting/2` and `Mod:is_empty/1`. Through the first one
-a vnode can agreeon or not to proceede with the handoff. The first one
-indicates if there's any data to be transfered and it's interesting in
-our case. So lets code it in `sc_storage_vnode.erl`:
+a vnode can agree on or not to proceede with the handoff. The second one
+indicates if there's any data to be transfered and this one is
+interesting for us. So lets code it in `sc_storage_vnode.erl`:
 ```erlang
 is_empty(State) ->
     case dict:size(State#state.store) of
@@ -397,7 +398,7 @@ is_empty(State) ->
 ```
 
 When the framework decides to start handoff it sends `?FOLD_REQ` that is
-a request representing how to fold over the data held by the vnode.
+a request representing how to fold over data held by the vnode.
 This request is supposed to be handled in `Mod:handle_handoff_command/3`
 and contains "folding function" along with initial accumulator.  Let's
 add it to our storage vnode:
@@ -409,17 +410,18 @@ handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
 ```
 
 > If you're like my and this ?FOLD_REQ looks strange to you have a look
-> at the [riak_core_vnode.hrl](https://github.com/basho/riak_core/blob/1.0/include/riak_core_vnode.hrl)
-> that reveals that the macro is just a record.
+> at the
+> [riak_core_vnode.hrl](https://github.com/basho/riak_core/blob/master/include/riak_core_vnode.hrl)
+> that reveals that the macro expands to a record.
 
 
 So, what's next with this magic handoff? Well, at this point things
 are simple: each iteration of "folding function" calls
 `Mod:encode_handoff_item/2` that just do what it is supposed to do:
 encode data before sending it to the targe vnode. The target vnode,
-suprisingly (!), decodes the data in `Mod:handle_handoff_data`. In
-this tutorial we are using extremely complex method of encoding so
-write the following code in your vnode really careful:
+decodes the data in `Mod:handle_handoff_data`. In this tutorial we are
+using extremely complex method of encoding so write the following code
+in your vnode really carefully:
 ```erlang
 encode_handoff_item(URL, Content) ->
     term_to_binary({URL, Content}).

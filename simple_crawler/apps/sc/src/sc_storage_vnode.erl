@@ -1,7 +1,7 @@
 -module(sc_storage_vnode).
 -behaviour(riak_core_vnode).
 -include("sc.hrl").
--include("deps/riak_core/include/riak_core_vnode.hrl").
+-include_lib("riak_core/include/riak_core_vnode.hrl").
 
 %% API
 -export([start_vnode/1,

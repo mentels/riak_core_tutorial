@@ -63,10 +63,8 @@ handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
     {noreply, State}.
 
-handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
-                       _Sender, State) ->
-    Acc = dict:fold(Fun, Acc0, State#state.store),
-    {reply, Acc, State}.
+handle_handoff_command(_Message, _Sender, State) ->
+    {noreply, State}.
 
 handoff_starting(_TargetNode, State) ->
     {true, State}.
@@ -77,21 +75,14 @@ handoff_cancelled(State) ->
 handoff_finished(_TargetNode, State) ->
     {ok, State}.
 
-handle_handoff_data(Data, State) ->
-    {URL, Content} = binary_to_term(Data),
-    Dict = dict:store(URL, Content, State#state.store),
-    {reply, ok, State#state{store = Dict}}.
+handle_handoff_data(_Data, State) ->
+    {reply, ok, State}.
 
-encode_handoff_item(URL, Content) ->
-    term_to_binary({URL, Content}).
+encode_handoff_item(_ObjectName, _ObjectValue) ->
+    <<>>.
 
 is_empty(State) ->
-    case dict:size(State#state.store) of
-        0 ->
-            {true, State};
-        _ ->
-            {false, State}
-    end.
+    {true, State}.
 
 delete(State) ->
     {ok, State}.

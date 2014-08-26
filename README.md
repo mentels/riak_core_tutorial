@@ -197,7 +197,7 @@ later retrieval. The desing is as follows:
 
 This part of the tutorial requires you to implement missing parts of
 the `simple_crawler` application that can be found in
-`RIAK_CORE_ENV/synced/riak_core_tutorail/simple_crawler`. The
+`RIAK_CORE_ENV/synced/crawler/simple_crawler`. The
 application structure is compliant with Erlang/OTP so all the modules
 are in `apps/sc/src`.
 
@@ -265,7 +265,7 @@ Additionaly, register the vnode in `sc_app.erl`:
 ```
 
 To test our new funcionality stop the whole cluster, clean project,
-build devrel again and form the cluster:
+build devrel and form the cluster:
 ```bash
 for d in dev/dev*; do $d/bin/sc stop; done
 make devclean && make devrel
@@ -289,7 +289,7 @@ tail -f dev/dev3/log/erlang.log.1
 > Run the above commands from separate consoles.
 
 Experiment a bit with `sc:download/1` API:  
-`1> sc:download("htp://www.erlang.org").`
+`[sc:download("http://www.erlang.org") || _ <- lists:seq(1,10)].`
 
 Note that the reuqests are serverd by random partitions on different
 nodes. Effectively it means that requests hit different vnodes (a vnode
@@ -421,7 +421,7 @@ are simple: each iteration of "folding function" calls
 `Mod:encode_handoff_item/2` that just do what it is supposed to do:
 encode data before sending it to the targe vnode. The target vnode,
 decodes the data in `Mod:handle_handoff_data/2`. In this tutorial we are
-using extremely complex method of encoding so write the following code
+using *extremely complex method of encoding* so write the following code
 in your storage vnode really carefully:
 ```erlang
 encode_handoff_item(URL, Content) ->
@@ -433,7 +433,7 @@ handle_handoff_data(Data, State) ->
     {reply, ok, State#state{store = Dict}}.
 ```
 
-And that's it. Our system is now "dead-node-resistant". One more thing
+And that's it. Our system is now "move-vnode-resistant". One more thing
 worth noting here: after the handoff is completed `Mod:delete/1`
 is called and the vnode will be terminated just after this call.
 During the termination `Mod:terminate/2` will be called too.
@@ -466,19 +466,23 @@ tail -f dev/dev2/log/erlang.log.1
 ```
 
 Download some websites using `sc:get_links/0`. This functions will return
-a list of 100 URLS:
+a list of 50 URLS:
 ```erlang
-sc:download(sc:get_links())
+[begin sc:download(L), timer:sleep(500) end  || L <- sc:get_links()].
 ```
 
 After that join the 3rd node and "tailf" its log. Wait for the cluster
 to get balanced and try to retrieve previously downloaded content using
 the attached console:
-```
+```bash
 dev/dev3/bin/sc-admin join sc1@127.0.0.1
 tail -f dev/dev3/log/erlang.log.1
-// in the node's console:
-spawn(fun() sc:get_content(sc:get_links()) end).
+```
+```erlang
+spawn(fun() -> [begin
+    sc:get_content(L),
+    timer:sleep(500)
+    end || L <- sc:get_links()] end).
 ```
 
 You should see that some URL's content is served by the 3rd node,

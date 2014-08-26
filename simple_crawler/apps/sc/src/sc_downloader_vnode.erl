@@ -3,7 +3,8 @@
 -include("sc.hrl").
 
 %% API
--export([start_vnode/1]).
+-export([start_vnode/1,
+        download/2]).
 
 %% Behaviour API
 -export([init/1,
@@ -21,16 +22,31 @@
          handle_exit/3]).
 
 -record(state, {partition}).
+-define(MASTER, sc_downloader_vnode_master).
 
 %% API
 start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
+
+-spec download({chash:index_as_int(), node()}, binary()) -> term().
+download(IdxNode, URL) ->
+    riak_core_vnode_master:command(IdxNode, {download, URL}, ?MASTER).
 
 %% Callbacks
 
 init([Partition]) ->
     {ok, #state {partition = Partition}}.
 
+handle_command({download, URL} = Req, _Sender, State) ->
+    print_request_info(State#state.partition, node(), Req),
+    try
+        Content = download(URL),
+        store(URL, Content)
+    catch
+        _:Reason ->
+            ?PRINT({request_failed, Req, Reason})
+    end,
+    {noreply, State};
 handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
     {noreply, State}.

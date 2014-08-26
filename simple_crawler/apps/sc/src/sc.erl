@@ -6,7 +6,7 @@
          download/1,
          store/2,
          get_content/1,
-         fill/0]).
+         get_links/0]).
 
 %% Public API
 
@@ -27,23 +27,21 @@ download(URL) ->
 %% @doc Store URL's content in a VNode correspoding to the URL
 -spec store(string(), binary()) -> term().
 store(URL, Content) ->
-    ok.
-    %% DocIdx = get_index_for_url(URL),
-    %% IdxNode = get_index_node(DocIdx),
-    %% sc_storage_vnode:store(IdxNode, {URL, Content}).
+    DocIdx = get_index_for_url(URL),
+    IdxNode = get_index_node(DocIdx),
+    sc_storage_vnode:store(IdxNode, {URL, Content}).
 
 %% @doc Get content for a given URL.
 -spec get_content(string()) -> {ok, binary()} | not_found.
 get_content(URL) ->
-    ok.
-    %% DocIdx = get_index_for_url(URL),
-    %% IdxNode = get_index_node(DocIdx),
-    %% sc_storage_vnode:get_content(IdxNode, URL).
+    DocIdx = get_index_for_url(URL),
+    IdxNode = get_index_node(DocIdx),
+    sc_storage_vnode:get_content(IdxNode, URL).
 
-%% @doc downloads content for all linkes specified in ../../links.txt
-fill() ->
+%% @doc Get URL from ../../links.txt
+get_links() ->
     {ok, File} = file:open("../../links.txt", [read]),
-    process_links(File).
+    get_links(File, []).
 
 %% Helpers
 

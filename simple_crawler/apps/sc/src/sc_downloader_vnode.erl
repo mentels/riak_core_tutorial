@@ -84,7 +84,9 @@ download(URL) ->
         {error, Reason} ->
             throw({download_error, Reason});
         {ok, {{_Version, _, ReasonPhrase}, _Headers, _Body}} ->
-            throw({download_error, ReasonPhrase})
+            throw({download_error, ReasonPhrase});
+        Other ->
+            throw({download_error, Other})
     end.
 
 store(URL, Content) ->

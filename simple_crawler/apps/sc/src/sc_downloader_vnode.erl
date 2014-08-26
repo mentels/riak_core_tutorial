@@ -82,7 +82,9 @@ download(URL) ->
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
             Body;
         {error, Reason} ->
-            throw({download_error, Reason})
+            throw({download_error, Reason});
+        {ok, {{_Version, _, ReasonPhrase}, _Headers, _Body}} ->
+            throw({download_error, ReasonPhrase})
     end.
 
 store(URL, Content) ->

@@ -471,14 +471,15 @@ Download some websites using `sc:get_links/0`. This functions will return
 a list of 100 URLS:
 ```erlang
 sc:download(sc:get_links())
-```.
+```
+
 After that join the 3rd node and "tailf" its log. Wait for the cluster
 to get balanced and try to retrieve previously downloaded content using
 the attached console:
 ```
 dev/dev3/bin/sc-admin join sc1@127.0.0.1
 tail -f dev/dev3/log/erlang.log.1
-// wait for a while....
+// in the node's console:
 spawn(fun() sc:get_content(sc:get_links()) end).
 ```
 

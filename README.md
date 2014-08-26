@@ -492,25 +492,54 @@ although it joined the cluster after all the sites had been downloaded.
 
 Without destroying the previous setup stop one of the nodes that you know
 holds content for some website. Then try to get content of the website.
-You should ended up with error similar to the following:
+You should end up with `not_found` response:
 ```erlang
-(sc1@127.0.0.1)13> sc:get_content("http://pinkbike.com").
-** exception error: no match of right hand side value []
-     in function  sc:get_index_node/1 (apps/sc/src/sc.erl, line 47)
-     in call from sc:get_content/1 (apps/sc/src/sc.erl, line 38)
+(sc1@127.0.0.1)9> sc:get_content("http://en.wikipedia.org/").
+not_found
 ```
-It says that we got unexpected empty list in `sc:get_index_node/1`.
-Have a look at this function:
+
+To tackle this problem we need to store our data on more that one vnode.
+Lets code it in via by changing  `sc:get_index_node/1` so that it gets
+number of vnodes:
 ```erlang
-get_index_node(DocIdx) ->
-    [{IndexNode, _Type}] =
-        riak_core_apl:get_primary_apl(DocIdx, 1, sc),
-    IndexNode.
+get_index_node(DocIdx, N) ->
+    riak_core_apl:get_apl(DocIdx, N, sc),
 ```
-It look like `riak_core_apl:get_primary_apl/3` returned empty list which
-means that it didn't find a vnode to serve our request. And that is
-actually true as we stored URL for the content only on one vnode its
-erlang node died. To remedy this situation we need to store our data
-on more than one node. 
+
+It also requires us to repair `sc:download/1`, `sc:store/2` and
+`sc:get_content/1`. Let's say that we want to store data on 3 vnodes:
+```erlang
+%% @doc Dispatch downloading URL's content to a random download_vnode.
+-spec download(string()) -> term().
+download(URL) ->
+    DocIdx = get_random_document_index(),
+    IdxNodes = get_index_node(DocIdx, 1),
+    sc_downloader_vnode:download(IdxNodes, URL).
+
+%% @doc Store URL's content in a VNode correspoding to the URL
+-spec store(string(), binary()) -> term().
+store(URL, Content) ->
+    DocIdx = get_index_for_url(URL),
+    IdxNodes = get_index_node(DocIdx, 3),
+    sc_storage_vnode:store(IdxNodes, {URL, Content}).
+
+%% @doc Get content for a given URL.
+-spec get_content(string()) -> {ok, binary()} | not_found.
+get_content(URL) ->
+    DocIdx = get_index_for_url(URL),
+    IdxNodes = get_index_node(DocIdx, 3),
+    R0 = [sc_storage_vnode:get_content(IN, URL) || IN <- IdxNodes],
+    R1 = lists:filter(fun(not_found) ->
+                         false;
+                    (X) ->
+                         X
+                      end, R0),
+    case R1 of
+        [] ->
+            not_found;
+        _ ->
+            hd(R1)
+    end.
+```
    
 

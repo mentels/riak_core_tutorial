@@ -373,20 +373,24 @@ vnode to another erlang node: so called *handoff*.
 
 A *handoff* occurs when a vnode realizes that it's not on the proper
 Erlang node. Such a situation can take place when:
-* a node is added to or removed from the ring
+* a node is added to or removed from the ring,
 * a node comes alive after it has been down.
 
 In riak_core there's a periodic "home check" that verifies whether
 a vnode uses correct physical node. If that's not true for some vnode
 it will go into *handoff mode* and data will be transferred. 
 
-### How to handle handoff? ###
+### Handling handoff ###
 
 When riak_core decides to perform a handoff it calls two functions:
 `Mod:handoff_starting/2` and `Mod:is_empty/1`. Through the first one
 a vnode can agree on or not to proceede with the handoff. The second one
 indicates if there's any data to be transfered and this one is
-interesting for us. So lets code it in `sc_storage_vnode.erl`:
+interesting for us. The vnode process started in `sc_storage_vnode` saves
+all the webpages' content into a dict data structure. Thus when a handoff
+occurs we want this dict to be transferred.
+
+So lets code `sc_storage_vnode:is_empty/1`:
 ```erlang
 is_empty(State) ->
     case dict:size(State#state.store) of
@@ -397,11 +401,11 @@ is_empty(State) ->
     end.
 ```
 
-When the framework decides to start handoff it sends `?FOLD_REQ` that is
-a request representing how to fold over data held by the vnode.
-This request is supposed to be handled in `Mod:handle_handoff_command/3`
-and contains "folding function" along with initial accumulator.  Let's
-add it to our storage vnode:
+When the framework decides to start handoff it sends `?FOLD_REQ` that
+that says the vnode how to fold over its data. This request is supposed
+to be handled in `Mod:handle_handoff_command/3` and contains "folding
+function" along with an initial accumulator. We should implement
+`handle_handoff_command/3` as follows:
 ```erlang
 handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
                        _Sender, State) ->
@@ -414,14 +418,13 @@ handle_handoff_command(?FOLD_REQ{foldfun = Fun, acc0=Acc0},
 > [riak_core_vnode.hrl](https://github.com/basho/riak_core/blob/master/include/riak_core_vnode.hrl)
 > that reveals that the macro expands to a record.
 
-
 So, what's next with this magic handoff? Well, at this point things
 are simple: each iteration of "folding function" calls
 `Mod:encode_handoff_item/2` that just do what it is supposed to do:
 encode data before sending it to the targe vnode. The target vnode,
-decodes the data in `Mod:handle_handoff_data`. In this tutorial we are
+decodes the data in `Mod:handle_handoff_data/2`. In this tutorial we are
 using extremely complex method of encoding so write the following code
-in your vnode really carefully:
+in your storage vnode really carefully:
 ```erlang
 encode_handoff_item(URL, Content) ->
     term_to_binary({URL, Content}).
@@ -432,35 +435,55 @@ handle_handoff_data(Data, State) ->
     {reply, ok, State#state{store = Dict}}.
 ```
 
-And that's it. Our system is now "dead node resistant". One more thing
-is worth noting here: after the handoff is completed `Mod:delete/1`
+And that's it. Our system is now "dead-node-resistant". One more thing
+worth noting here: after the handoff is completed `Mod:delete/1`
 is called and the vnode will be terminated just after this call.
 During the termination `Mod:terminate/2` will be called too.
 
 > I did not present all the callbacks related to handoff. For more
-> information go to great explanation
+> information go to a great tutorial
 [here](https://github.com/vitormazzi/try-try-try/tree/master/2011/riak-core-the-vnode#handoff).
 > If you need more details look at the
 [basho wiki](https://github.com/basho/riak_core/wiki/Handoffs).
 
 ### See handoff in action ###
 
-Now, when we have handoff impleted, build devrel, start the cluster,
+Now, when we have handoff implemented, build devrel, start the cluster,
 **but only join dev2 to dev1**. We want to observe how the partitions
 are moved:
 ```bash
+for d in dev/dev*; do $d/bin/sc stop; done
+make devclean && make devrel
 for d in dev/dev*; do $d/bin/sc start; done
 dev/dev2/bin/sc-admin join sc1@127.0.0.1
 ```
-Wait for the ring to get populated symmetricaly across the nodes. Use
-`./dev/dev1/bin/sc-admin member_status` to check the status.
+Wait for the ring to get populated symmetrically across the two nodes.
+Use `./dev/dev1/bin/sc-admin member_status` to check the status.
 
-Next attach to the console of node from the cluster and look at the
-logs of the other node. Download some websites and write down on
-which erlang node they are stored. Next join the 3rd node to the cluster
-and try to retrieve content from previously downloaded sites. You
-should see that some of them will be serverd from the new node
-and it's transparent to a user.
+Next attach to the console of one node from the cluster "tailf"
+logs of the other node:
+```bash
+dev/dev1/bin/sc attach
+tail -f dev/dev2/log/erlang.log.1
+```
+
+Download some websites using `sc:get_links/0`. This functions will return
+a list of 100 URLS:
+```erlang
+sc:download(sc:get_links())
+```.
+After that join the 3rd node and "tailf" its log. Wait for the cluster
+to get balanced and try to retrieve previously downloaded content using
+the attached console:
+```
+dev/dev3/bin/sc-admin join sc1@127.0.0.1
+tail -f dev/dev3/log/erlang.log.1
+// wait for a while....
+spawn(fun() sc:get_content(sc:get_links()) end).
+```
+
+You should see that some URL's content is served by the 3rd node,
+although it joined the cluster after all the sites had been downloaded.
 
 ## Fault tolerance ##
 

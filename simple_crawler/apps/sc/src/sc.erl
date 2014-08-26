@@ -57,13 +57,12 @@ get_index_node(DocIdx) ->
 get_index_for_url(URL) ->
     riak_core_util:chash_key({<<"url">>, list_to_binary(URL)}).
 
-process_links(File) ->
+get_links(File, Acc) ->
     case io:get_line(File, "") of
         eof ->
             file:close(File),
-            ok;
-        Line ->
-            download(Line),
-            process_links(File)
+            Acc;
+        URL ->
+            get_links(File, [URL | Acc])
     end.
                 

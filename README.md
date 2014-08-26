@@ -488,7 +488,7 @@ spawn(fun() -> [begin
 You should see that some URL's content is served by the 3rd node,
 although it joined the cluster after all the sites had been downloaded.
 
-## Fault tolerance ##
+## Fault tolerance (in progress) ##
 
 Without destroying the previous setup stop one of the nodes that you know
 holds content for some website. Then try to get content of the website.
@@ -512,8 +512,5 @@ means that it didn't find a vnode to serve our request. And that is
 actually true as we stored URL for the content only on one vnode its
 erlang node died. To remedy this situation we need to store our data
 on more than one node. 
-
-### Notatki ###
-1. Erlang R15B03 jest potrzebny
    
 

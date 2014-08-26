@@ -61,6 +61,14 @@ get_links(File, Acc) ->
             file:close(File),
             Acc;
         URL ->
-            get_links(File, [URL | Acc])
+            get_links(File, [strip_new_line(URL) | Acc])
+    end.
+
+strip_new_line(URL) ->
+    case re:replace(URL, "\n", "") of
+        [U, _] ->
+            binary_to_list(U);
+        URL ->
+            URL
     end.
                 

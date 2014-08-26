@@ -6,9 +6,8 @@ riak_core_tutorial
 To skip setting up an environment there is already one prepared for this
 tutorial: [riak_core_env](https://github.com/mentels/riak_core_env).
 In the following chapters I assume that you have the environment
-running and do the whole work in
-`RIAK_CORE_ENV/synced/riak_core_tutorail/` directory mentioned in the
-link.
+running and do the whole work in `RIAK_CORE_ENV/synced/` directory
+mentioned in the link.
 
 ## Multinode Hello World ##
 
@@ -36,10 +35,9 @@ cd rebar_riak_core && make install
 #### Hello Multinode!!! ####
 
 Once we have the template let's use it to generate an Erlang app. Enter
-the `hello_multinode` directory and invoke rebar:
+the `multinode` directory and invoke rebar:
 ```bash
-cd ~/synced/riak_core_tutorial/hello_multinode &&
-./rebar create template=riak_core appid=hwmn nodeid=hwmn
+cd ~/synced/multinode && ./rebar create template=riak_core appid=hwmn nodeid=hwmn
 ```
 
 Next tweak it a little bit so that we work on the newest stable release
@@ -74,13 +72,13 @@ Status     Ring    Pending    Node
 valid     100.0%      --      'hwmn1@127.0.0.1'
 -------------------------------------------------------------------------------
 ```
-This simply means that the nodes **ARE NOT** in any relation - node /hwmn1/
+This simply means that the nodes **ARE NOT** in any relation - node *hwmn1*
 knows just about itself. But as you probably already know riak_core
 machinery was invented to actually help nodes live together. To join
 them, issue:  
 `for d in dev/dev{2,3,4}; do $d/bin/hwmn-admin cluster join hwmn1@127.0.0.1; done`  
 
-But this is not enough. We've just *staged* changes to the ring. Before
+But this is not enough. We've just **staged** changes to the ring. Before
 they take effect we have to **confirm** the plan and **commit**. Yeah,
 complicated... but move forward:  
 `dev/dev1/bin/hwmn-admin cluster plan`  
@@ -120,10 +118,10 @@ What is it? After the
 > each object are determined using the consistent hashing technique.
 
 Basically, if we want to perform an operation in a particular riak_core
-node (I'll try to explain mysterious *vnode* later) **and** we always
-want it to be the same node for a particular input, we use
-consistent hasing. And the resulting hash value for a given input stays
-the same regardless of changes to the ring.
+virtual node (I'll try to explain later mysterious virtual node
+- *vnode*) **and** we always want it to be the same vnode for a
+particular input, we use consistent hasing. And the resulting hash
+value for a given input stays the same regardless of changes to the ring.
 
 As an exercise we can compute a hash value for some input and make
 sure that it's the same over the ring. To do so attach to one of
@@ -162,13 +160,13 @@ How can we make a use of a computed `Hash`? We can get a list of vnodes
 on which we can perform/store something.
 
 ```
-riak_core_apl:get_primary_apl(Hash, _N = 2, hwmn).
+riak_core_apl:get_apl(Hash, _N = 2, hwmn).
 ```
 > `apl` stands for *active preference list*.
 >
-> The value of `_N` indicates how many nodes we want to involve in
+> The value of `_N` indicates how many vnodes we want to involve in
 > performing some operation associated with `Hash`. For example we might
-> want to save an object on two nodes.
+> want to save an object on two vnodes.
 
 
 The output from the call looks like this:

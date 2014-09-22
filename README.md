@@ -1,6 +1,21 @@
 riak_core_tutorial
 ==================
 
+## Table of Contents ##
+1. [Environment](#environment)
+2. [Multinode Hello World](#multinode-hello-world)
+    3. [Installing rebar template for riak_core](#installing-rebar-template-for-riak_core)
+    4. [Hello Multinode!!!](#hello-multinode)
+    5. [Consistent Hashing](#consistent-hashing)
+6. [Implementing simple crawler](#implementing-simple-crawler)
+    7. [Implementing downloader part](#implementing-downloader-part)
+    8. [Implementing storage part](#implementing-storage-part)
+9. [Handoff](#handoff)
+    10. [What is handoff](#what-is-handoff)
+    11. [Handling handoff](#handling-handoff)
+    12. [See handoff in action](#see-handoff-in-action)
+13. [Fault tolerance](#fault-tolerance)
+
 ## Environment ##
 
 To skip setting up an environment there is already one prepared for this

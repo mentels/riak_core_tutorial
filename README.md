@@ -503,7 +503,7 @@ spawn(fun() -> [begin
 You should see that some URL's content is served by the 3rd node,
 although it joined the cluster after all the sites had been downloaded.
 
-## Fault tolerance (in progress) ##
+## Fault tolerance ##
 
 Without destroying the previous setup stop one of the nodes that you know
 holds content for some website. Then try to get content of the website.
@@ -514,40 +514,34 @@ not_found
 ```
 
 To tackle this problem we need to store our data on more that one vnode.
-Lets code it in via by changing  `sc:get_index_node/1` so that it gets
+Lets code it in by changing  `sc:get_index_node/1` so that it gets
 number of vnodes:
 ```erlang
 get_index_node(DocIdx, N) ->
     riak_core_apl:get_apl(DocIdx, N, sc),
 ```
 
-It also requires us to repair `sc:download/1`, `sc:store/2` and
+It also requires us to repair `sc:download/1`, `sc:store/2` and 
 `sc:get_content/1`. Let's say that we want to store data on 3 vnodes:
 ```erlang
-%% @doc Dispatch downloading URL's content to a random download_vnode.
--spec download(string()) -> term().
 download(URL) ->
     DocIdx = get_random_document_index(),
     IdxNodes = get_index_node(DocIdx, 1),
     sc_downloader_vnode:download(IdxNodes, URL).
 
-%% @doc Store URL's content in a VNode correspoding to the URL
--spec store(string(), binary()) -> term().
 store(URL, Content) ->
     DocIdx = get_index_for_url(URL),
     IdxNodes = get_index_node(DocIdx, 3),
     sc_storage_vnode:store(IdxNodes, {URL, Content}).
 
-%% @doc Get content for a given URL.
--spec get_content(string()) -> {ok, binary()} | not_found.
 get_content(URL) ->
     DocIdx = get_index_for_url(URL),
     IdxNodes = get_index_node(DocIdx, 3),
     R0 = [sc_storage_vnode:get_content(IN, URL) || IN <- IdxNodes],
     R1 = lists:filter(fun(not_found) ->
-                         false;
-                    (X) ->
-                         X
+                              false;
+                         (_) ->
+                              true
                       end, R0),
     case R1 of
         [] ->
@@ -555,6 +549,33 @@ get_content(URL) ->
         _ ->
             hd(R1)
     end.
+```
+
+Try that it really works. First start the cluster, join the nodes,
+attach to `sc1` and observe logs:
+```bash
+for d in dev/dev*; do $d/bin/sc stop; done
+make devclean && make devrel
+for d in dev/dev*; do $d/bin/sc start; done
+for d in dev/dev{2,3}; do $d/bin/sc-admin join sc1@127.0.0.1; done
+dev/dev1/bin/sc attach
+tail -f dev/dev2/log/erlang.log.1
+tail -f dev/dev3/log/erlang.log.1
+```
+
+Then wait for the ring to get synced and download some sites. In the logs
+you should see that the same data is duplicated over several vnodes
+(for the data to be safe at least 2 vnodes should be located on different
+physical nodes):
+```erlang
+[begin sc:download(L), timer:sleep(500) end  || L <- sc:get_links()].
+```
+
+Find a request for one website in a node, bring that node down and
+try to query that website. It should be still availabe on another node
+that hold a vnode for that website:
+```erlang
+sc:get_content("http://en.wikipedia.org/").
 ```
    
 

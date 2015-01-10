@@ -21,22 +21,33 @@ ping() ->
 -spec download(string()) -> term().
 download(URL) ->
     DocIdx = get_random_document_index(),
-    IdxNode = get_index_node(DocIdx),
-    sc_downloader_vnode:download(IdxNode, URL).
+    IdxNodes = get_index_node(DocIdx, 1),
+    sc_downloader_vnode:download(IdxNodes, URL).
 
 %% @doc Store URL's content in a VNode correspoding to the URL
 -spec store(string(), binary()) -> term().
 store(URL, Content) ->
     DocIdx = get_index_for_url(URL),
-    IdxNode = get_index_node(DocIdx),
-    sc_storage_vnode:store(IdxNode, {URL, Content}).
+    IdxNodes = get_index_node(DocIdx, 3),
+    sc_storage_vnode:store(IdxNodes, {URL, Content}).
 
 %% @doc Get content for a given URL.
 -spec get_content(string()) -> {ok, binary()} | not_found.
 get_content(URL) ->
     DocIdx = get_index_for_url(URL),
-    IdxNode = get_index_node(DocIdx),
-    sc_storage_vnode:get_content(IdxNode, URL).
+    IdxNodes = get_index_node(DocIdx, 3),
+    R0 = [sc_storage_vnode:get_content(IN, URL) || IN <- IdxNodes],
+    R1 = lists:filter(fun(not_found) ->
+                              false;
+                         (_) ->
+                              true
+                      end, R0),
+    case R1 of
+        [] ->
+            not_found;
+        _ ->
+            hd(R1)
+    end.
 
 %% @doc Get URL from ../../links.txt
 get_links() ->
@@ -48,9 +59,8 @@ get_links() ->
 get_random_document_index() ->
     riak_core_util:chash_key({<<"download">>, term_to_binary(now())}).
 
-get_index_node(DocIdx) ->
-    [IndexNode] = riak_core_apl:get_apl(DocIdx, 1, sc),
-    IndexNode.
+get_index_node(DocIdx, N) ->
+    riak_core_apl:get_apl(DocIdx, N, sc).
 
 get_index_for_url(URL) ->
     riak_core_util:chash_key({<<"url">>, list_to_binary(URL)}).
